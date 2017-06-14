@@ -1,0 +1,46 @@
+[package]
+authors = ["Jorge Aparicio <jorge@japaric.io>"]
+name = "firmware"
+repository = "https://github.com/japaric/2wd"
+version = "0.1.0"
+
+[dependencies]
+cortex-m-rtfm = "0.1.1"
+
+[dependencies.blue-pill]
+git = "https://github.com/japaric/blue-pill"
+rev = "c089e7e526cce4620cf8e1b16d6d62d692e6b814"
+
+[dependencies.byteorder]
+default-features = false
+version = "1.0.0"
+
+[dependencies.cast]
+default-features = false
+version = "0.2.2"
+
+[dependencies.cortex-m]
+version = "0.2.10"
+
+[dependencies.cortex-m-rt]
+version = "0.2.4"
+
+[dependencies.embedded-hal]
+git = "https://github.com/japaric/embedded-hal"
+rev = "5295697669f5b48a900aa325b8ebb4d4e8d4b236"
+
+[dependencies.nb]
+git = "https://github.com/japaric/nb"
+optional = false
+
+[dependencies.shared]
+path = "../shared"
+
+[profile]
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+debug = true
+lto = true
