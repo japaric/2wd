@@ -4,7 +4,7 @@
 
 ## Usage
 
-```
+``` console
 $ cat /dev/input/js0 | remote > /dev/rfcomm0
 ```
 

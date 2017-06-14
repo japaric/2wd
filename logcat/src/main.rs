@@ -1,11 +1,3 @@
-//! Decodes log frames
-//!
-//! # Usage
-//!
-//! ```
-//! $ cat /dev/rfcomm0 | logcat
-//! ```
-
 extern crate shared;
 
 use std::io::{self, Read, Write};
@@ -26,6 +18,7 @@ fn run() -> io::Result<()> {
     let mut byte = [0];
     let mut input = [0; 10];
     loop {
+        // Synchronize frame
         loop {
             stdin.read_exact(&mut byte)?;
             if byte == [SYNC_BYTE] {
