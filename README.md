@@ -2,11 +2,11 @@
 
 > A remotely controlled wheeled robot
 
+## [Old footage](https://mobile.twitter.com/japaricious/status/843971417083432961)
+
 ![Side view](https://i.imgur.com/6tfG6y8.jpg)
 
 ![Top view](https://i.imgur.com/lBd229X.jpg)
-
-## [Old footage](https://mobile.twitter.com/japaricious/status/843971417083432961)
 
 ## Part list
 
