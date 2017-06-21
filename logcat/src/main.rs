@@ -34,7 +34,7 @@ fn run() -> io::Result<()> {
 
         writeln!(
             stdout,
-            "CPU: {:.2}% - SL: {} - SR: {} - DL: {}, - DR: {}",
+            "CPU: {:.2}% - SL: {} - SR: {} - DL: {} - DR: {}",
             cpu,
             state.speed_left,
             state.speed_right,

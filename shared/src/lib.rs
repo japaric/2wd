@@ -8,8 +8,6 @@ extern crate byteorder;
 
 use byteorder::{ByteOrder, LittleEndian};
 
-// TODO add frame synchronization
-
 /// Remote control command
 pub enum Command {
     /// Start / stop
