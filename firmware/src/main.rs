@@ -1,9 +1,8 @@
 #![deny(warnings)]
 #![feature(const_fn)]
-#![feature(plugin)]
+#![feature(proc_macro)]
 #![feature(used)]
 #![no_std]
-#![plugin(rtfm_macros)]
 
 extern crate blue_pill;
 extern crate cast;
@@ -22,7 +21,7 @@ use blue_pill::stm32f103xx;
 use blue_pill::time::{Hertz, Microseconds};
 use blue_pill::{Capture, Channel, Pwm, Serial, Timer};
 use cast::i32;
-use rtfm::Threshold;
+use rtfm::{Threshold, app};
 use shared::{Command, State};
 
 // CONFIGURATION
@@ -35,7 +34,7 @@ const NERF_NUM: i32 = 3;
 const NERF_DEN: i32 = 4;
 
 // TASKS AND RESOURCES
-rtfm! {
+app! {
     device: blue_pill::stm32f103xx,
 
     resources: {
@@ -49,12 +48,7 @@ rtfm! {
         TX_BUFFER: Buffer<[u8; 11], Dma1Channel4> = Buffer::new([0; 11]);
     },
 
-    init: {
-        path: init,
-    },
-
     idle: {
-        path: idle,
         resources: [DWT, SLEEP_CYCLES],
     },
 
