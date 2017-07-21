@@ -21,7 +21,7 @@ use blue_pill::stm32f103xx;
 use blue_pill::time::{Hertz, Microseconds};
 use blue_pill::{Capture, Channel, Pwm, Serial, Timer};
 use cast::i32;
-use rtfm::{Threshold, app};
+use rtfm::{app, Resource, Threshold};
 use shared::{Command, State};
 
 // CONFIGURATION
@@ -38,14 +38,14 @@ app! {
     device: blue_pill::stm32f103xx,
 
     resources: {
-        ACTIVE: bool = false;
-        DUTY_L: i16 = 0;
-        DUTY_R: i16 = 0;
-        POS_L: u8 = 0;
-        POS_R: u8 = 0;
-        RX_BUFFER: Buffer<[u8; 3], Dma1Channel5> = Buffer::new([0; 3]);
-        SLEEP_CYCLES: u32 = 0;
-        TX_BUFFER: Buffer<[u8; 11], Dma1Channel4> = Buffer::new([0; 11]);
+        static ACTIVE: bool = false;
+        static DUTY_L: i16 = 0;
+        static DUTY_R: i16 = 0;
+        static POS_L: u8 = 0;
+        static POS_R: u8 = 0;
+        static RX_BUFFER: Buffer<[u8; 3], Dma1Channel5> = Buffer::new([0; 3]);
+        static SLEEP_CYCLES: u32 = 0;
+        static TX_BUFFER: Buffer<[u8; 11], Dma1Channel4> = Buffer::new([0; 11]);
     },
 
     idle: {
@@ -123,7 +123,7 @@ fn init(p: init::Peripherals, r: init::Resources) {
 }
 
 // IDLE LOOP: CPU MONITOR
-fn idle(_t: Threshold, mut r: idle::Resources) -> ! {
+fn idle(_t: &mut Threshold, mut r: idle::Resources) -> ! {
     loop {
         rtfm::atomic(|cs| {
             let sleep_cycles = r.SLEEP_CYCLES.borrow_mut(cs);
@@ -140,15 +140,15 @@ fn idle(_t: Threshold, mut r: idle::Resources) -> ! {
 
 // TASKS
 task!(DMA1_CHANNEL5, rx, Local {
-    x: i16 = 0;
-    y: i16 = 0;
+    static X: i16 = 0;
+    static Y: i16 = 0;
 });
 
 // Measure motor speed
 task!(TIM4, capture);
 
-fn capture(_t: Threshold, r: TIM4::Resources) {
-    let capture = Capture(r.TIM4);
+fn capture(_t: &mut Threshold, r: TIM4::Resources) {
+    let capture = Capture(&**r.TIM4);
 
     match capture.capture(Channel::_1) {
         Err(nb::Error::Other(_)) => panic!(), // overcapture
@@ -168,13 +168,13 @@ fn capture(_t: Threshold, r: TIM4::Resources) {
 }
 
 // New command arrived
-fn rx(_t: Threshold, l: &mut Local, r: DMA1_CHANNEL5::Resources) {
-    let serial = Serial(r.USART1);
-    let pwm = Pwm(r.TIM3);
+fn rx(_t: &mut Threshold, l: &mut Local, r: DMA1_CHANNEL5::Resources) {
+    let serial = Serial(&**r.USART1);
+    let pwm = Pwm(&**r.TIM3);
 
     r.RX_BUFFER.release(r.DMA1).unwrap();
 
-    let cmd = Command::deserialize(&r.RX_BUFFER.borrow());
+    let cmd = Command::deserialize(&(**r.RX_BUFFER).borrow());
 
     // queue a new read
     serial.read_exact(r.DMA1, r.RX_BUFFER).unwrap();
@@ -185,8 +185,8 @@ fn rx(_t: Threshold, l: &mut Local, r: DMA1_CHANNEL5::Resources) {
                 Green.off();
 
                 **r.ACTIVE = false;
-                l.x = 0;
-                l.y = 0;
+                *l.X = 0;
+                *l.Y = 0;
 
                 // Hand brake
                 LeftMotor.brake();
@@ -205,18 +205,18 @@ fn rx(_t: Threshold, l: &mut Local, r: DMA1_CHANNEL5::Resources) {
 
             return;
         }
-        Ok(Command::X(v)) if **r.ACTIVE => l.x = v,
-        Ok(Command::Y(v)) if **r.ACTIVE => l.y = v,
+        Ok(Command::X(v)) if **r.ACTIVE => *l.X = v,
+        Ok(Command::Y(v)) if **r.ACTIVE => *l.Y = v,
         _ => return,
     }
 
     if **r.ACTIVE {
         // NOTE y < 0 means forwards, x > 0 means turn right
-        let (x, y) = (i32(l.x), i32(l.y));
+        let (x, y) = (i32(*l.X), i32(*l.Y));
 
         // NOTE speed > 0 means forwards
-        let speed = ((i32(pwm.get_max_duty()) * -y / NERF_DEN) * NERF_NUM) >>
-            15;
+        let speed =
+            ((i32(pwm.get_max_duty()) * -y / NERF_DEN) * NERF_NUM) >> 15;
 
         let (speed_l, speed_r) = if x > 0 {
             (speed, (speed * ((1 << 15) - 2 * x)) >> 15)
@@ -245,9 +245,9 @@ fn rx(_t: Threshold, l: &mut Local, r: DMA1_CHANNEL5::Resources) {
 task!(TIM1_UP_TIM10, log);
 
 // Log state periodically
-fn log(_t: Threshold, r: TIM1_UP_TIM10::Resources) {
-    let timer = Timer(r.TIM1);
-    let serial = Serial(r.USART1);
+fn log(_t: &mut Threshold, r: TIM1_UP_TIM10::Resources) {
+    let timer = Timer(&**r.TIM1);
+    let serial = Serial(&**r.USART1);
 
     // clear the update flag
     timer.wait().unwrap();
@@ -260,7 +260,7 @@ fn log(_t: Threshold, r: TIM1_UP_TIM10::Resources) {
             speed_left: **r.POS_L,
             speed_right: **r.POS_R,
         };
-        state.serialize(&mut *r.TX_BUFFER.borrow_mut());
+        state.serialize(&mut (**r.TX_BUFFER).borrow_mut());
 
         serial.write_all(r.DMA1, r.TX_BUFFER).unwrap();
     }
@@ -272,7 +272,7 @@ fn log(_t: Threshold, r: TIM1_UP_TIM10::Resources) {
 
 task!(DMA1_CHANNEL4, tx_transfer_done);
 
-fn tx_transfer_done(_t: Threshold, r: DMA1_CHANNEL4::Resources) {
+fn tx_transfer_done(_t: &mut Threshold, r: DMA1_CHANNEL4::Resources) {
     r.TX_BUFFER.release(r.DMA1).unwrap();
 }
 
