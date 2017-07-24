@@ -29,9 +29,10 @@ const BAUD_RATE: Hertz = Hertz(115_200);
 const CAPTURE_RESOLUTION: Microseconds = Microseconds(100);
 const PWM_FREQUENCY: Hertz = Hertz(1_000);
 const TIMER_FREQUENCY: Hertz = Hertz(1);
-// Rust too op; please nerf
-const NERF_NUM: i32 = 3;
-const NERF_DEN: i32 = 4;
+// If the input voltage is too high use this to limit to voltage applied to the
+// motor
+const DOWNVOLTAGE_NUM: i32 = 3;
+const DOWNVOLTAGE_DEN: i32 = 4;
 
 // TASKS AND RESOURCES
 app! {
@@ -215,8 +216,8 @@ fn rx(_t: &mut Threshold, l: &mut Local, r: DMA1_CHANNEL5::Resources) {
         let (x, y) = (i32(*l.X), i32(*l.Y));
 
         // NOTE speed > 0 means forwards
-        let speed =
-            ((i32(pwm.get_max_duty()) * -y / NERF_DEN) * NERF_NUM) >> 15;
+        let speed = ((i32(pwm.get_max_duty()) * -y / DOWNVOLTAGE_DEN) *
+            DOWNVOLTAGE_NUM) >> 15;
 
         let (speed_l, speed_r) = if x > 0 {
             (speed, (speed * ((1 << 15) - 2 * x)) >> 15)
