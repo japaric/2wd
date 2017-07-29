@@ -7,7 +7,6 @@
 extern crate blue_pill;
 extern crate cast;
 extern crate cortex_m_rt;
-#[macro_use]
 extern crate cortex_m_rtfm as rtfm;
 extern crate nb;
 extern crate shared;
@@ -47,6 +46,8 @@ app! {
         static RX_BUFFER: Buffer<[u8; 3], Dma1Channel5> = Buffer::new([0; 3]);
         static SLEEP_CYCLES: u32 = 0;
         static TX_BUFFER: Buffer<[u8; 11], Dma1Channel4> = Buffer::new([0; 11]);
+        static X: i16 = 0;
+        static Y: i16 = 0;
     },
 
     idle: {
@@ -55,14 +56,12 @@ app! {
 
     tasks: {
         DMA1_CHANNEL4: {
-            enabled: true,
-            priority: 1,
+            path: tx_transfer_done,
             resources: [DMA1, TX_BUFFER],
         },
 
         DMA1_CHANNEL5: {
-            enabled: true,
-            priority: 1,
+            path: rx,
             resources: [
                 ACTIVE,
                 DMA1,
@@ -71,12 +70,13 @@ app! {
                 RX_BUFFER,
                 TIM3,
                 USART1,
+                X,
+                Y,
             ],
         },
 
         TIM1_UP_TIM10: {
-            enabled: true,
-            priority: 1,
+            path: log,
             resources: [
                 ACTIVE,
                 DMA1,
@@ -92,8 +92,7 @@ app! {
         },
 
         TIM4: {
-            enabled: true,
-            priority: 1,
+            path: capture,
             resources: [POS_L, POS_R, TIM4],
         },
     },
@@ -124,10 +123,10 @@ fn init(p: init::Peripherals, r: init::Resources) {
 }
 
 // IDLE LOOP: CPU MONITOR
-fn idle(_t: &mut Threshold, mut r: idle::Resources) -> ! {
+fn idle(t: &mut Threshold, mut r: idle::Resources) -> ! {
     loop {
-        rtfm::atomic(|cs| {
-            let sleep_cycles = r.SLEEP_CYCLES.borrow_mut(cs);
+        rtfm::atomic(t, |t| {
+            let sleep_cycles = r.SLEEP_CYCLES.borrow_mut(t);
 
             let before = r.DWT.cyccnt.read();
             rtfm::wfi();
@@ -140,14 +139,8 @@ fn idle(_t: &mut Threshold, mut r: idle::Resources) -> ! {
 }
 
 // TASKS
-task!(DMA1_CHANNEL5, rx, Local {
-    static X: i16 = 0;
-    static Y: i16 = 0;
-});
 
 // Measure motor speed
-task!(TIM4, capture);
-
 fn capture(_t: &mut Threshold, r: TIM4::Resources) {
     let capture = Capture(&**r.TIM4);
 
@@ -169,7 +162,7 @@ fn capture(_t: &mut Threshold, r: TIM4::Resources) {
 }
 
 // New command arrived
-fn rx(_t: &mut Threshold, l: &mut Local, r: DMA1_CHANNEL5::Resources) {
+fn rx(_t: &mut Threshold, r: DMA1_CHANNEL5::Resources) {
     let serial = Serial(&**r.USART1);
     let pwm = Pwm(&**r.TIM3);
 
@@ -186,8 +179,8 @@ fn rx(_t: &mut Threshold, l: &mut Local, r: DMA1_CHANNEL5::Resources) {
                 Green.off();
 
                 **r.ACTIVE = false;
-                *l.X = 0;
-                *l.Y = 0;
+                **r.X = 0;
+                **r.Y = 0;
 
                 // Hand brake
                 LeftMotor.brake();
@@ -206,14 +199,14 @@ fn rx(_t: &mut Threshold, l: &mut Local, r: DMA1_CHANNEL5::Resources) {
 
             return;
         }
-        Ok(Command::X(v)) if **r.ACTIVE => *l.X = v,
-        Ok(Command::Y(v)) if **r.ACTIVE => *l.Y = v,
+        Ok(Command::X(v)) if **r.ACTIVE => **r.X = v,
+        Ok(Command::Y(v)) if **r.ACTIVE => **r.Y = v,
         _ => return,
     }
 
     if **r.ACTIVE {
         // NOTE y < 0 means forwards, x > 0 means turn right
-        let (x, y) = (i32(*l.X), i32(*l.Y));
+        let (x, y) = (i32(**r.X), i32(**r.Y));
 
         // NOTE speed > 0 means forwards
         let speed = ((i32(pwm.get_max_duty()) * -y / DOWNVOLTAGE_DEN) *
@@ -243,8 +236,6 @@ fn rx(_t: &mut Threshold, l: &mut Local, r: DMA1_CHANNEL5::Resources) {
     }
 }
 
-task!(TIM1_UP_TIM10, log);
-
 // Log state periodically
 fn log(_t: &mut Threshold, r: TIM1_UP_TIM10::Resources) {
     let timer = Timer(&**r.TIM1);
@@ -270,8 +261,6 @@ fn log(_t: &mut Threshold, r: TIM1_UP_TIM10::Resources) {
     **r.POS_R = 0;
     **r.SLEEP_CYCLES = 0;
 }
-
-task!(DMA1_CHANNEL4, tx_transfer_done);
 
 fn tx_transfer_done(_t: &mut Threshold, r: DMA1_CHANNEL4::Resources) {
     r.TX_BUFFER.release(r.DMA1).unwrap();
